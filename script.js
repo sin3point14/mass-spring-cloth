@@ -25,7 +25,7 @@ const globals = new (function () {
 
     // physical properties
     this.mass = 0.2
-    this.stretchStiffness = 5
+    this.stretchStiffness = 20
     this.shearStiffness = 1
     this.dampingConst = 0.1
 
@@ -302,8 +302,8 @@ function simulate(delta) {
 
 triangulate()
 
-for(i = Math.floor(globals.pointsX / 2); i < globals.pointsX; i++) {
-    addForce(pointLinearIndex(i, 0), -0.01, 0)
+for(i = 0; i < globals.pointsY; i++) {
+    addForce(pointLinearIndex(globals.pointsX - 1, i), 0, 0.01)
 }
 
 for (i = 0; i < globals.pointsX; i++) {

@@ -3,14 +3,17 @@ const globals = new (function () {
     this.ctx = document.getElementById("myCanvas").getContext("2d")
 
     // for now support only square grids
+    // all values here in pixels
     this.sizeX = 500
     this.sizeY = 500
     this.gridX = 20
     this.gridY = 20
+    // remember to use this for all physical calculations
+    this.metreToPixelRatio = 0.0001
     this.pointsX = this.gridX + 1
     this.pointsY = this.gridY + 1
 
-    // all point position, velocity, accel states
+    // all point position, velocity, accel states, in SI units
     this.points = []
 
     // adjacency lists of points
@@ -21,13 +24,13 @@ const globals = new (function () {
     this.rigidPoints = new Set()
 
     // physical properties
-    this.mass = 100
+    this.mass = 0.2
     this.stretchStiffness = 5
     this.shearStiffness = 1
-    this.dampingConst = 3
+    this.dampingConst = 0.1
 
-    this.shearSpringRestLen = (this.sizeX / this.gridX) * Math.sqrt(2) // square plz
-    this.stretchSpringRestLen = this.sizeX / this.gridX
+    this.shearSpringRestLen = (this.sizeX / this.gridX) * Math.sqrt(2) * this.metreToPixelRatio // square plz
+    this.stretchSpringRestLen = this.sizeX / this.gridX * this.metreToPixelRatio
     this.pointMass = this.mass / (this.pointsX * this.pointsY)
 
     // visualization
@@ -38,8 +41,12 @@ const globals = new (function () {
 })()
 
 function addPoint(x, y) {
-    globals.points.push({ x, y, vx: 0, vy: 0 })
+    globals.points.push({ x: x * globals.metreToPixelRatio, y: y * globals.metreToPixelRatio, vx: 0, vy: 0 })
     return globals.points.length - 1
+}
+
+function getPointPixels(p) {
+    return {x: p.x / globals.metreToPixelRatio, y: p.y / globals.metreToPixelRatio}
 }
 
 function distance(p1, p2) {
@@ -176,6 +183,7 @@ function visualize() {
     let canvas = globals.canvas
     let ctx = globals.ctx
     let points = globals.points
+    const metreToPixelRatio = globals.metreToPixelRatio
 
     ctx.save()
     ctx.setTransform(1, 0, 0, 1, 0, 0)
@@ -188,8 +196,10 @@ function visualize() {
         globals.stretchSprings.forEach((e, i) => {
             // we'll draw twice, but oh well
             e.forEach((p) => {
-                ctx.moveTo(points[i].x, points[i].y)
-                ctx.lineTo(points[p].x, points[p].y)
+                let from = getPointPixels(points[i])
+                let to = getPointPixels(points[p])
+                ctx.moveTo(from.x , from.y)
+                ctx.lineTo(to.x, to.y)
             })
         })
         ctx.stroke()
@@ -202,8 +212,10 @@ function visualize() {
         globals.shearSprings.forEach((e, i) => {
             // we'll draw twice, but oh well
             e.forEach((p) => {
-                ctx.moveTo(points[i].x, points[i].y)
-                ctx.lineTo(points[p].x, points[p].y)
+                let from = getPointPixels(points[i])
+                let to = getPointPixels(points[p])
+                ctx.moveTo(from.x , from.y)
+                ctx.lineTo(to.x, to.y)
             })
         })
         ctx.stroke()
@@ -213,16 +225,18 @@ function visualize() {
     if (globals.showForces) {
         ctx.strokeStyle = "#000000"
         globals.forces.forEach((value, key) => {
-            let to = { x: points[key].x + (value.fx) / 10, y: points[key].y + (value.fy) / 10 }
-            drawArrow(points[key], to)
+            let pixelPoint = getPointPixels(points[key])
+            let to = { x: pixelPoint.x + (value.fx) * 1000, y: pixelPoint.y + (value.fy) * 1000 }
+            drawArrow(pixelPoint, to)
         })
     }
 
     if (globals.showRigidpoints) {
         ctx.fillStyle = "#0000FF"
         globals.rigidPoints.forEach(e => {
+            let pixelPoint = getPointPixels(points[e])
             ctx.beginPath()
-            ctx.arc(points[e].x, points[e].y, 5, 0, 2 * Math.PI)
+            ctx.arc(pixelPoint.x, pixelPoint.y, 5, 0, 2 * Math.PI)
             ctx.fill()
         })
     }
@@ -278,20 +292,18 @@ function simulate(delta) {
         fy += -p.vy * dampingConst
 
         // Euler explicit scheme
-        p.x += p.vx * delta
-        p.y += p.vy * delta
-
+        p.x += (p.vx * delta)
+        p.y += (p.vy * delta)
 
         p.vx += (fx / pointMass) * delta
         p.vy += (fy / pointMass) * delta
-
     })
 }
 
 triangulate()
 
 for(i = Math.floor(globals.pointsX / 2); i < globals.pointsX; i++) {
-    addForce(pointLinearIndex(i, 0), -300, 0)
+    addForce(pointLinearIndex(i, 0), -0.01, 0)
 }
 
 for (i = 0; i < globals.pointsX; i++) {
@@ -301,10 +313,12 @@ for (i = 0; i < globals.pointsX; i++) {
 let lastTime = (new Date()).getTime()
 
 function animation() {
+    const Tf = Math.PI * Math.sqrt(globals.pointMass / globals.stretchStiffness)
     let currentTime = (new Date()).getTime()
     delta = (currentTime - lastTime) / 1000
-
-    simulate(delta)
+    let slices = Math.ceil(delta / (0.1 * Tf));
+    for(i = 0; i < slices; i++)
+        simulate(delta / slices)
     visualize()
 
     lastTime = currentTime
@@ -313,4 +327,3 @@ function animation() {
 }
 
 window.requestAnimationFrame(animation)
-
